@@ -1,0 +1,6 @@
+data/*.json
+data/*.tmp
+*.pyc
+__pycache__/
+.DS_Store
+temp/
