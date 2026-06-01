@@ -74,6 +74,14 @@ def filter_asset_rows(rows: list[dict], model_id: str = "", q: str = "", search:
     return filtered
 
 
+def validate_asset_row(row: dict) -> tuple[bool, str]:
+    """Validate fields required to keep table rows attached to a model."""
+    model_id = str(row.get("modelId", "")).strip()
+    if not model_id or model_id == "unknown":
+        return False, "modelId is required"
+    return True, ""
+
+
 class CashflowHandler(BaseHTTPRequestHandler):
     server_version = "CashflowDeploy/1.0"
 
@@ -112,6 +120,10 @@ class CashflowHandler(BaseHTTPRequestHandler):
         with DATA_LOCK:
             rows = load_rows()
             row = self.prepare_row(payload)
+            valid, error = validate_asset_row(row)
+            if not valid:
+                self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
+                return
             rows.append(row)
             save_rows(rows)
         self.send_json(row, HTTPStatus.CREATED)
@@ -130,10 +142,24 @@ class CashflowHandler(BaseHTTPRequestHandler):
                 if not isinstance(item, dict):
                     continue
                 row = self.prepare_row(item)
+                valid, error = validate_asset_row(row)
+                if not valid:
+                    created.append({"_error": error, "_source": item})
+                    continue
                 rows.append(row)
                 created.append(row)
             save_rows(rows)
-        self.send_json({"data": created, "success": len(created), "failed": len(rows_payload) - len(created)}, HTTPStatus.CREATED)
+        success_rows = [row for row in created if not row.get("_error")]
+        error_rows = [row for row in created if row.get("_error")]
+        self.send_json(
+            {
+                "data": success_rows,
+                "errors": error_rows,
+                "success": len(success_rows),
+                "failed": len(rows_payload) - len(success_rows),
+            },
+            HTTPStatus.CREATED,
+        )
 
     def prepare_row(self, payload: dict) -> dict:
         row = dict(payload)
@@ -164,6 +190,10 @@ class CashflowHandler(BaseHTTPRequestHandler):
                 if str(row.get("id")) == row_id:
                     updated = dict(payload) if replace else {**row, **payload}
                     updated["id"] = row_id
+                    valid, error = validate_asset_row(updated)
+                    if not valid:
+                        self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
+                        return
                     rows[index] = updated
                     save_rows(rows)
                     self.send_json(updated)

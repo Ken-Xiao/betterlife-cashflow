@@ -3310,8 +3310,8 @@ function calculateDetailedCashflow(startDate, months, assets) {
     assets.forEach(asset => {
         const schedule = getAssetFutureSchedule(asset);
         const totalDeduction = schedule.totalDeduction;
+        const deductedAmount = schedule.deductedAmount;
         const remainingPeriods = schedule.remainingPeriods;
-        const monthlyFutureAmount = schedule.monthlyFutureAmount;
         
         if (remainingPeriods <= 0 || totalDeduction <= 0) return;
         
@@ -3324,8 +3324,8 @@ function calculateDetailedCashflow(startDate, months, assets) {
         assetPeriodAmounts.set(asset.asset_id || asset.id, {
             periodAmount: periodAmount,  // 每期未来回款（不含已代扣）
             remainingPeriods: remainingPeriods,
-            originalPeriods: periods.originalPeriods,
-            deductedPeriods: periods.deductedPeriods,
+            originalPeriods: schedule.originalPeriods,
+            deductedPeriods: schedule.deductedPeriods,
             startDate: startDate,
             deductedAmount: deductedAmount  // 记录已代扣金额
         });
@@ -11456,6 +11456,24 @@ function exportWaterfallToExcel() {
     ], {
         title: '偿付瀑布按钮公式校验',
         description: '复核“导出偿付瀑布”按钮生成的核心合计。'
+    });
+
+    appendRowFormulaAuditSheet(wb, periods.map((p, index) => {
+        const sourceRow = index + 2;
+        return {
+            button: '导出偿付瀑布',
+            sourceSheet: '月度偿付瀑布',
+            sourceRow,
+            label: `${p.label || p.period} 剩余资金`,
+            jsValue: dataRows[index][9] || 0,
+            formula: `${waterfallSheet}!C${sourceRow}+${waterfallSheet}!D${sourceRow}-${waterfallSheet}!E${sourceRow}-${waterfallSheet}!F${sourceRow}-${waterfallSheet}!G${sourceRow}-${waterfallSheet}!H${sourceRow}-${waterfallSheet}!I${sourceRow}`,
+            note: '逐行复核：资产流入+信保流入-费用-优先/劣后本息'
+        };
+    }), {
+        sheetName: '偿付瀑布行级公式校验',
+        buttonName: '导出偿付瀑布',
+        sourceSheet: '月度偿付瀑布',
+        description: '逐月复核偿付瀑布按钮的剩余资金计算。'
     });
     
     // 导出

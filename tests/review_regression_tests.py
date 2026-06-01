@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_JS = ROOT / "js" / "app.js"
 INDEX_HTML = ROOT / "index.html"
 SERVER_PY = ROOT / "deploy_server.py"
+MODULE_DIR = ROOT / "js" / "modules"
 
 
 def load_server_module():
@@ -76,6 +77,36 @@ class SourceRegressionTests(unittest.TestCase):
         self.assertIn("function calculateTrustPoolContribution", source)
         self.assertNotIn("totalPeriods <= 12 ? 95 : 88", source)
 
+    def test_stabilization_modules_are_loaded_before_app(self):
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        expected_modules = [
+            "configPolicy.js",
+            "assetSchedule.js",
+            "cashflowCore.js",
+            "exportAudit.js",
+            "apiClient.js",
+        ]
+        for module_name in expected_modules:
+            self.assertTrue((MODULE_DIR / module_name).exists(), module_name)
+            self.assertIn(f"js/modules/{module_name}", html)
+        self.assertLess(html.index("js/modules/configPolicy.js"), html.index("js/app.js"))
+
+    def test_extracted_modules_preserve_key_boundaries(self):
+        config_policy = (MODULE_DIR / "configPolicy.js").read_text(encoding="utf-8")
+        asset_schedule = (MODULE_DIR / "assetSchedule.js").read_text(encoding="utf-8")
+        cashflow_core = (MODULE_DIR / "cashflowCore.js").read_text(encoding="utf-8")
+        export_audit = (MODULE_DIR / "exportAudit.js").read_text(encoding="utf-8")
+        api_client = (MODULE_DIR / "apiClient.js").read_text(encoding="utf-8")
+
+        self.assertIn("DEFAULT_TRUST_CONFIGS", config_policy)
+        self.assertIn("annualProbabilityToMonthlyRate", config_policy)
+        self.assertIn("getAssetFutureSchedule", asset_schedule)
+        self.assertIn("calculateTrustPoolContribution", asset_schedule)
+        self.assertIn("calculateDetailedCashflowCore", cashflow_core)
+        self.assertIn("buildRowFormulaAuditRows", export_audit)
+        self.assertIn("createCashflowApiClient", api_client)
+        self.assertIn("forceModelId", APP_JS.read_text(encoding="utf-8"))
+
     def test_deducted_amount_contract_and_difference_are_explicit(self):
         source = APP_JS.read_text(encoding="utf-8")
         self.assertIn("cashflowIncludesDeductedAmount: true", source)
@@ -102,6 +133,8 @@ class SourceRegressionTests(unittest.TestCase):
         self.assertIn("DATA_LOCK", source)
         self.assertIn("def create_rows_batch", source)
         self.assertIn("def delete_rows_by_model", source)
+        self.assertIn("def validate_asset_row", source)
+        self.assertIn("modelId is required", source)
 
     def test_model_stats_use_unfiltered_database_scan(self):
         source = APP_JS.read_text(encoding="utf-8")
@@ -180,6 +213,15 @@ class ServerFilterTests(unittest.TestCase):
                 self.assertEqual([row["id"] for row in filtered], ["1"])
             finally:
                 server.DATA_FILE = original_data_file
+
+
+class ServerWriteIntegrityTests(unittest.TestCase):
+    def test_validate_asset_row_rejects_orphan_model_ids(self):
+        server = load_server_module()
+
+        self.assertEqual(server.validate_asset_row({"asset_id": "a1"})[0], False)
+        self.assertEqual(server.validate_asset_row({"asset_id": "a1", "modelId": "unknown"})[0], False)
+        self.assertEqual(server.validate_asset_row({"asset_id": "a1", "modelId": "m1"})[0], True)
 
 
 if __name__ == "__main__":

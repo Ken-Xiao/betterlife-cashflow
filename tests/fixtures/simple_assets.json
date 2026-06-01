@@ -1,0 +1,22 @@
+[
+  {
+    "asset_id": "FULL_001",
+    "asset_type": "整装",
+    "total_deduction": 120000,
+    "deducted_amount": 20000,
+    "remaining_periods": 10,
+    "total_periods": 10,
+    "period_deduction": 12000,
+    "lease_start_date": "2026-01-01"
+  },
+  {
+    "asset_id": "PART_001",
+    "asset_type": "局装",
+    "total_deduction": 60000,
+    "deducted_amount": 0,
+    "remaining_periods": 6,
+    "total_periods": 6,
+    "period_deduction": 10000,
+    "lease_start_date": "2026-01-01"
+  }
+]
